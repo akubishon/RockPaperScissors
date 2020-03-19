@@ -1,0 +1,125 @@
+package com.example.rockpaperscissors.ui
+
+import android.content.Intent
+import android.os.Bundle
+import androidx.appcompat.app.AppCompatActivity
+import android.view.Menu
+import android.view.MenuItem
+import com.example.rockpaperscissors.R
+import com.example.rockpaperscissors.database.GameRepository
+import com.example.rockpaperscissors.model.Game
+
+import kotlinx.android.synthetic.main.activity_main.*
+import kotlinx.android.synthetic.main.content_main.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.*
+
+class MainActivity : AppCompatActivity() {
+
+    private lateinit var gameRepository: GameRepository
+    private val mainScope = CoroutineScope(Dispatchers.Main)
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        setSupportActionBar(toolbar)
+
+        gameRepository = GameRepository(this)
+
+        updateStatistics()
+
+        ivRock.setOnClickListener { playOneRound(0) }
+        ivPaper.setOnClickListener { playOneRound(1) }
+        ivScissors.setOnClickListener { playOneRound(2) }
+
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        // Inflate the menu; this adds items to the action bar if it is present.
+        menuInflater.inflate(R.menu.menu_main, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        // Handle action bar item clicks here. The action bar will
+        // automatically handle clicks on the Home/Up button, so long
+        // as you specify a parent activity in AndroidManifest.xml.
+        return when (item.itemId) {
+            R.id.action_history -> {
+                startHistoryActivity()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    private fun playOneRound(playersChoice: Int) {
+
+        val computersChoice = (0..2).random() //generates computer answer
+        var result = -1
+
+        ivComputer.setImageResource(Game.GAME_RES_DRAWABLES_IDS[computersChoice])
+        ivYou.setImageResource(Game.GAME_RES_DRAWABLES_IDS[playersChoice])
+
+        if (playersChoice == computersChoice) {result = 1} else {
+            when (playersChoice) {
+                0 -> {
+                    when (computersChoice) {
+                        1 -> result = 0
+                        2 -> result = 2
+                    }
+                }
+                1 -> {
+                    when (computersChoice) {
+                        0 -> result = 2
+                        2 -> result = 0
+                    }
+                }
+                2 -> {
+                    when (computersChoice) {
+                        0 -> result = 0
+                        1 -> result = 2
+                    }
+                }
+            }
+        }
+
+        when(result) {
+            0 -> tvResult.text = getString(R.string.computer_wins)
+            1 -> tvResult.text = getString(R.string.draw)
+            2 -> tvResult.text = getString(R.string.you_win)
+        }
+
+        mainScope.launch {
+            val game = Game(date = Date(), computer = computersChoice,
+                player = playersChoice, result = result)
+            withContext(Dispatchers.IO) {
+                gameRepository.addGame(game)
+            }
+
+            updateStatistics()
+        }
+
+    }
+
+    private fun startHistoryActivity() {
+        val intent = Intent(this, GameHistoryActivity::class.java)
+        startActivity(intent)
+    }
+
+    private fun updateStatistics() {
+        mainScope.launch {
+            val stats = withContext(Dispatchers.IO) {
+                return@withContext arrayOf(gameRepository.getLossesCount(),
+                    gameRepository.getDrawsCount(), gameRepository.getWinsCount())
+        }
+            this@MainActivity.tvStatistics.text =
+                """Losses: ${stats[0]} | Draws: ${stats[1]} | Wins: ${stats[2]}"""
+
+        }
+    }
+
+}
